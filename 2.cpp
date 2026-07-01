@@ -76,6 +76,7 @@ void send_command(const std::string& cmd) {
     
     write(serial_fd, data.c_str(), data.length());
     std::cout << "[Отправлено]: " << cmd << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
 }
 
 std::string read_line() {
@@ -148,7 +149,7 @@ void parse_sms_content(const std::string& line) {
                 // Удаляем сообщение после прочтения
                 std::string delete_cmd = "AT+CMGD=" + index_str;
                 send_command(delete_cmd);
-                std::this_thread::sleep_for(std::chrono::milliseconds(200));
+                //std::this_thread::sleep_for(std::chrono::milliseconds(200));
             //}
         }
     }
@@ -157,18 +158,10 @@ void parse_sms_content(const std::string& line) {
 // ==================== ПОТОК ЧТЕНИЯ ====================
 
 void reader_thread_func() {
-    std::cout << " Поток чтения запущен. Ожидание SMS...\n" << std::endl;
+    std::cout << " Поток чтения запущен\n" << std::endl;
     
-    // Настраиваем модуль для приёма SMS
-    send_command("AT+CMGF=1");           // Текстовый режим
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    send_command("AT+CNMI=2,1");         // Уведомления о новых SMS
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
     send_command("AT+CPMS=\"SM\",\"SM\",\"SM\"");  // Используем SIM-карту
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
-    
-    std::cout << "SIM800C настроен для приёма SMS" << std::endl;
-    std::cout << "Ожидание входящих сообщений...\n" << std::endl;
     
     while (running && serial_fd != -1) {
         std::string line = read_line();
@@ -221,6 +214,8 @@ int main() {
     
     // Запускаем поток для чтения
     std::thread reader_thread(reader_thread_func);
+
+
     
     // Ждем завершения (Ctrl+C)
     reader_thread.join();
