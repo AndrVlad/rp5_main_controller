@@ -212,7 +212,10 @@ void signal_handler(int sig) {
     }
 }
 
-
+bool is_sms_correct(const std::string& line) {
+  parse_sms(line);
+  return true;
+}
 
 void parse_sms(const std::string& line) {
     std::cout << "Разбор СМС " << line << std::endl;
@@ -251,7 +254,7 @@ int main() {
                 if (line.find("OK")) {
                     current_state = POLLING_SIM;
                     wait_ans = true;
-                    send_command("AT+CMGR=\"REC UNREAD\"");
+                    send_command("AT+CMGL=\"REC UNREAD\"");
                     std::cout << "change state on " << current_state;
                 }
             }
@@ -262,13 +265,27 @@ int main() {
             if(!rx_ok && wait_ans) {
                 break;
             } else if (rx_ok && wait_ans) {
-                wait_ans = false;
                 rx_ok = false;
-                parse_sms(line);
+  
+                if (line.find("+CMGL")) {
+                    if(is_sms_correct(line)) {
+                        current_state = CLEARING_SIM_STORAGE;
+                        
+                    } else {
+                        turn_off();        
+                    }
+                } else if (line.find("OK")) {
+                    
+                }
+                
+                
                 running = false;
                 break;
             }
 
+            break;
+        case CLEARING_SIM_STORAGE:
+            
             break;
         case HACK_RF_INTERACTION:
             
