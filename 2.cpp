@@ -12,6 +12,7 @@
 
 int serial_fd = -1;
 int current_state = 1;
+int hackrf_cmd = -1;
 std::atomic<bool> running(true);
 std::atomic<bool> sms_received(false);
 std::string sms_text;
@@ -19,7 +20,8 @@ std::string sms_sender;
 bool rx_ok = 0;
 bool wait_ans = 0;
 
-enum State {WAKE_UP = 1, POLLING_SIM, HACK_RF_INTERACTION};
+enum State {WAKE_UP = 1, POLLING_SIM, HACK_RF_INTERACTION, CLEARING_SIM_STORAGE, TURN_OFF, IDLE};
+enum hackRFCMD {START_HACKRF = 1, STOP_HACKRF};
 
 void AT_parser(const std::string& line) {
     return;
@@ -111,6 +113,10 @@ std::string read_line() {
     
     while (!result.empty() && (result.back() == '\r' || result.back() == '\n')) {
         result.pop_back();
+    }
+
+    while (!result.empty() && (result.front() == '\r' || result.front() == '\n')) {
+        result.erase(0, 1);
     }
     
     return result;
@@ -212,13 +218,45 @@ void signal_handler(int sig) {
     }
 }
 
+void parse_sms(const std::string& line) {
+    std::cout << "Разбор СМС " << line << std::endl;
+    return;
+}
+
 bool is_sms_correct(const std::string& line) {
   parse_sms(line);
   return true;
 }
 
-void parse_sms(const std::string& line) {
-    std::cout << "Разбор СМС " << line << std::endl;
+
+
+void setState(int next_state) {
+    current_state = next_state;
+    std::cout << "Изменено состояние на " << current_state << std::endl;
+}
+
+std::string get_sms_index(const std::string& line) {
+   
+    return "1"; 
+}
+
+int get_sms_content(const std::string& line) {
+    return 1;
+}
+
+void startHackrfTransfer() {
+    return;
+}
+
+void stopHackrfTransfer() {
+    return;
+}
+
+bool isHackrfProcessStopped() {
+    return true;
+}
+
+void powerOff() {
     return;
 }
 
@@ -240,7 +278,6 @@ int main() {
         if (!line.empty()) {
             std::cout << "[Получено]: " << line << std::endl;
             rx_ok = true;
-
         }
 
         switch (current_state)
@@ -251,11 +288,10 @@ int main() {
                 send_command("AT");
             } else {
                 rx_ok = false;
-                if (line.find("OK")) {
-                    current_state = POLLING_SIM;
+                if (line.find("OK") != std::string::npos) {
+                    setState(POLLING_SIM);
                     wait_ans = true;
                     send_command("AT+CMGL=\"REC UNREAD\"");
-                    std::cout << "change state on " << current_state;
                 }
             }
             break;
@@ -265,30 +301,70 @@ int main() {
             if(!rx_ok && wait_ans) {
                 break;
             } else if (rx_ok && wait_ans) {
+
                 rx_ok = false;
-  
-                if (line.find("+CMGL")) {
-                    if(is_sms_correct(line)) {
-                        current_state = CLEARING_SIM_STORAGE;
-                        
-                    } else {
-                        turn_off();        
-                    }
+                wait_ans = false;
+
+                if (line.find("+CMGL") != std::string::npos) {
+                    hackrf_cmd = get_sms_content(line);
+                    if(hackrf_cmd == START_HACKRF || hackrf_cmd == STOP_HACKRF) {
+                        setState(CLEARING_SIM_STORAGE);
+                        send_command("AT+CMGD="+get_sms_index(line));
+                        wait_ans = true;
+                    } 
                 } else if (line.find("OK")) {
-                    
+                    setState(TURN_OFF);
+                    send_command("AT+CMGD="+get_sms_index(line));
+                    wait_ans = true;
+                    std::cout << "Сообщений нет, отключение устройства" << std::endl;
+                } else {
+                    std::cout << "Нет ответа на прошлый запрос" << std::endl;
                 }
-                
-                
-                running = false;
                 break;
             }
 
             break;
         case CLEARING_SIM_STORAGE:
             
+            if (rx_ok && line.find("OK")) {
+                setState(HACK_RF_INTERACTION);
+                wait_ans = false;
+                rx_ok = false;
+            } else {
+                std::cout << "Нет ответа на удаление SMS" << std::endl;
+            }
             break;
+
         case HACK_RF_INTERACTION:
             
+            if (hackrf_cmd == START_HACKRF) {
+                std::cout << "Начата передача файла по hackrf" << std::endl;
+                startHackrfTransfer();
+
+            } else if(hackrf_cmd == STOP_HACKRF) {
+                std::cout << "Остановлена передача файла по hackrf" << std::endl;
+                stopHackrfTransfer();
+            }
+
+            setState(IDLE);
+
+            break;
+        case IDLE:
+            
+            if (rx_ok) {
+                rx_ok = false;
+                std::cout << "Получены данные от SIM800C в процессе ожидания " << line << std::endl;
+            }
+
+            if (isHackrfProcessStopped()) {
+                std::cout << "Передача по hackRF завершена" << std::endl;
+                setState(TURN_OFF);
+            }
+
+            break;
+
+        case TURN_OFF:
+            running = false;
             break;
         default:
             break;
@@ -300,7 +376,7 @@ int main() {
     //std::thread reader_thread(reader_thread_func);
 
     //reader_thread.join();
-    
+    powerOff();
     close_port();
     std::cout << " Программа завершена" << std::endl;
     return 0;
