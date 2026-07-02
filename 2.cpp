@@ -312,7 +312,7 @@ int main() {
                         send_command("AT+CMGD="+get_sms_index(line));
                         wait_ans = true;
                     } 
-                } else if (line.find("OK")) {
+                } else if (line.find("OK") != std::string::npos) {
                     setState(TURN_OFF);
                     send_command("AT+CMGD="+get_sms_index(line));
                     wait_ans = true;
@@ -326,7 +326,7 @@ int main() {
             break;
         case CLEARING_SIM_STORAGE:
             
-            if (rx_ok && line.find("OK")) {
+            if (rx_ok && (line.find("OK") != std::string::npos)) {
                 setState(HACK_RF_INTERACTION);
                 wait_ans = false;
                 rx_ok = false;
