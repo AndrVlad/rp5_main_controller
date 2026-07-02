@@ -11,10 +11,19 @@
 #include <cstdlib>
 
 int serial_fd = -1;
+int current_state = 1;
 std::atomic<bool> running(true);
 std::atomic<bool> sms_received(false);
 std::string sms_text;
 std::string sms_sender;
+bool rx_ok = 0;
+bool wait_ans = 0;
+
+enum State {WAKE_UP = 1, POLLING_SIM, HACK_RF_INTERACTION};
+
+void AT_parser(const std::string& line) {
+    return;
+}
 
 int open_port(const char* port, int baudrate) {
     int fd = open(port, O_RDWR | O_NOCTTY | O_NDELAY);
@@ -160,7 +169,7 @@ void parse_sms_content(const std::string& line) {
 void reader_thread_func() {
     std::cout << " Поток чтения запущен\n" << std::endl;
     
-    send_command("AT+CPMS=\"SM\",\"SM\",\"SM\"");  // Используем SIM-карту
+    send_command("AT+CPMS=\"SM\",\"SM\",\"SM\"");  
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
     
     while (running && serial_fd != -1) {
@@ -168,7 +177,8 @@ void reader_thread_func() {
         if (!line.empty()) {
             std::cout << "[Получено]: " << line << std::endl;
             
-            // Проверяем, не является ли это уведомлением о новом SMS
+            AT_parser(line);
+
             parse_sms_content(line);
             
             // Если SMS получено, выполняем команду
@@ -202,6 +212,13 @@ void signal_handler(int sig) {
     }
 }
 
+
+
+void parse_sms(const std::string& line) {
+    std::cout << "Разбор СМС " << line << std::endl;
+    return;
+}
+
 // ==================== ОСНОВНАЯ ФУНКЦИЯ ====================
 
 int main() {
@@ -212,13 +229,60 @@ int main() {
         return 1;
     }
     
+    running=true;
+
+    while (running && serial_fd != -1) {
+        std::string line = read_line();
+
+        if (!line.empty()) {
+            std::cout << "[Получено]: " << line << std::endl;
+            rx_ok = true;
+
+        }
+
+        switch (current_state)
+        {
+        case WAKE_UP:
+            
+            if (!rx_ok) {
+                send_command("AT");
+            } else {
+                rx_ok = false;
+                if (line.find("OK")) {
+                    current_state = POLLING_SIM;
+                    wait_ans = true;
+                    send_command("AT+CMGR=\"REC UNREAD\"");
+                    std::cout << "change state on " << current_state;
+                }
+            }
+            break;
+
+        case POLLING_SIM:
+            
+            if(!rx_ok && wait_ans) {
+                break;
+            } else if (rx_ok && wait_ans) {
+                wait_ans = false;
+                rx_ok = false;
+                parse_sms(line);
+                running = false;
+                break;
+            }
+
+            break;
+        case HACK_RF_INTERACTION:
+            
+            break;
+        default:
+            break;
+        }
+
+    }
+
     // Запускаем поток для чтения
-    std::thread reader_thread(reader_thread_func);
+    //std::thread reader_thread(reader_thread_func);
 
-
-    
-    // Ждем завершения (Ctrl+C)
-    reader_thread.join();
+    //reader_thread.join();
     
     close_port();
     std::cout << " Программа завершена" << std::endl;
