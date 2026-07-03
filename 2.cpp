@@ -9,6 +9,7 @@
 #include <cstring>
 #include <signal.h>
 #include <cstdlib>
+#include <gpiod.hpp>
 
 int serial_fd = -1;
 int current_state = 1;
@@ -256,7 +257,67 @@ bool isHackrfProcessStopped() {
     return true;
 }
 
+void gpio_pin_set(int bcm_pin_num, bool state) {
+    const std::string chip_path = "/dev/gpiochip0"; 
+    const unsigned int line_offset = bcm_pin_num;
+    try {
+        auto request = ::gpiod::chip(chip_path)
+            .prepare_request()
+            .set_consumer("rp5_blink_example")
+            .add_line_settings(
+                line_offset,
+                ::gpiod::line_settings()
+                    .set_direction(::gpiod::line::direction::OUTPUT) 
+            )
+            .do_request(); 
+          
+      if (state) {
+            request.set_value(line_offset, ::gpiod::line::value::ACTIVE);
+        } else {
+            request.set_value(line_offset, ::gpiod::line::value::INACTIVE);
+        }
+          
+      } catch (const std::exception& e) {
+        std::cerr << "Ошибка: " << e.what() << std::endl;
+        return;
+    }
+}
+
+void gpio_pin_ctrl(int bcm_pin_num, bool state, int delay_mcs=1) {
+    
+    const std::string chip_path = "/dev/gpiochip0"; 
+    const unsigned int line_offset = bcm_pin_num;
+      
+    try {
+        auto request = ::gpiod::chip(chip_path)
+            .prepare_request()
+            .set_consumer("rp5_blink_example")
+            .add_line_settings(
+                line_offset,
+                ::gpiod::line_settings()
+                    .set_direction(::gpiod::line::direction::OUTPUT) 
+            )
+            .do_request(); 
+            
+            if (state) {
+                request.set_value(line_offset, ::gpiod::line::value::ACTIVE);
+                std::this_thread::sleep_for(std::chrono::microseconds(delay_mcs));
+                request.set_value(line_offset, ::gpiod::line::value::INACTIVE);
+            } else {
+                request.set_value(line_offset, ::gpiod::line::value::INACTIVE);
+                std::this_thread::sleep_for(std::chrono::microseconds(delay_mcs));
+                request.set_value(line_offset, ::gpiod::line::value::ACTIVE);
+            }
+            
+    } catch (const std::exception& e) {
+        std::cerr << "Ошибка: " << e.what() << std::endl;
+        return;
+    }
+      
+}
+
 void powerOff() {
+    gpio_pin_ctrl(17,0,10);
     return;
 }
 
@@ -271,6 +332,8 @@ int main() {
     }
     
     running=true;
+    
+    gpio_pin_set(17, 1);
 
     while (running && serial_fd != -1) {
         std::string line = read_line();
@@ -385,8 +448,8 @@ int main() {
     //std::thread reader_thread(reader_thread_func);
 
     //reader_thread.join();
-    powerOff();
     close_port();
+    powerOff();
     std::cout << " Программа завершена" << std::endl;
     return 0;
 }
