@@ -10,12 +10,16 @@
 #include <signal.h>
 #include <cstdlib>
 #include <gpiod.hpp>
+#include <sys/wait.h>
+#include <signal.h>
 
 int serial_fd = -1;
 int current_state = 1;
 int hackrf_cmd = -1;
 std::atomic<bool> running(true);
 std::atomic<bool> sms_received(false);
+std::atomic<bool> hackrf_running(false);
+pid_t hackrf_pid = -1;
 std::string sms_text;
 std::string sms_sender;
 bool rx_ok = 0;
@@ -245,15 +249,84 @@ int get_sms_content(const std::string& line) {
     return 1;
 }
 
-void startHackrfTransfer() {
+void start_hackrf_transfer() {
+    if (hackrf_running) {
+        std::cout << "HackRF уже запущен" << std::endl;
+        return;
+    }
+    
+    pid_t pid = fork();
+    
+    if (pid == -1) {
+        std::cerr << "Ошибка fork()" << std::endl;
+        return;
+    }
+    
+    if (pid == 0) {
+        
+        execlp("hackrf_transfer", 
+               "hackrf_transfer",
+               "-t", "../../dji_2467mhz_clean.iq",
+               "-f", "2467000000",
+               "-x", "47",
+               "-a", "1",
+               "-p", "1",
+               nullptr);
+        
+        std::cerr << "Ошибка запуска hackrf_transfer" << std::endl;
+        exit(1);
+    }
+    
+    hackrf_pid = pid;
+    hackrf_running = true;
+    std::cout << "HackRF запущен (PID: " << pid << ")" << std::endl;
     return;
 }
 
-void stopHackrfTransfer() {
-    return;
+void stop_hackrf_transfer() {
+    if (hackrf_running && hackrf_pid > 0) {
+        std::cout << "Остановка HackRF (PID: " << hackrf_pid << ")" << std::endl;
+        kill(hackrf_pid, SIGTERM);  
+        
+        int status;
+        int wait_time = 0;
+        while (wait_time < 30) {  
+            pid_t result = waitpid(hackrf_pid, &status, WNOHANG);
+            if (result == hackrf_pid) {
+                hackrf_running = false;
+                hackrf_pid = -1;
+                std::cout << "HackRF остановлен" << std::endl;
+                return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            wait_time++;
+        }
+        
+        kill(hackrf_pid, SIGKILL);
+        waitpid(hackrf_pid, &status, 0);
+        hackrf_running = false;
+        hackrf_pid = -1;
+        std::cout << "HackRF принудительно остановлен" << std::endl;
+    }
 }
 
-bool isHackrfProcessStopped() {
+bool is_hackrf_transfer_running() {
+    if (!hackrf_running || hackrf_pid <= 0) {
+        return false;
+    }
+    
+    // Проверяем, жив ли процесс
+    int status;
+    pid_t result = waitpid(hackrf_pid, &status, WNOHANG);
+    
+    if (result == hackrf_pid) {
+        // Процесс завершился
+        hackrf_running = false;
+        hackrf_pid = -1;
+        std::cout << "HackRF завершил работу (статус: " << WEXITSTATUS(status) << ")" << std::endl;
+        return false;
+    }
+    
     return true;
 }
 
@@ -402,7 +475,7 @@ int main() {
                 }
                 
             } else {
-                std::cout << "Нет ответа на удаление SMS" << std::endl;
+                //std::cout << "Нет ответа на удаление SMS" << std::endl;
                 // доработать логику
             }
             break;
@@ -410,15 +483,15 @@ int main() {
         case HACK_RF_INTERACTION:
             
             if (hackrf_cmd == START_HACKRF) {
-                std::cout << "Начата передача файла по hackrf" << std::endl;
-                startHackrfTransfer();
+                start_hackrf_transfer();
+                setState(IDLE);
 
             } else if(hackrf_cmd == STOP_HACKRF) {
-                std::cout << "Остановлена передача файла по hackrf" << std::endl;
-                stopHackrfTransfer();
+                stop_hackrf_transfer();
+                
+                setState(TURN_OFF);
+                
             }
-
-            setState(IDLE);
 
             break;
         case IDLE:
@@ -426,9 +499,14 @@ int main() {
             if (rx_ok) {
                 rx_ok = false;
                 std::cout << "Получены данные от SIM800C в процессе ожидания " << line << std::endl;
+                if(line.find("+CMTI:") != std::string::npos) {
+                  hackrf_cmd = STOP_HACKRF;
+                  send_command("AT+CMGD="+get_sms_index(line));
+                  setState(HACK_RF_INTERACTION);
+                }
             }
 
-            if (isHackrfProcessStopped()) {
+            if (!is_hackrf_transfer_running()) {
                 std::cout << "Передача по hackRF завершена" << std::endl;
                 setState(TURN_OFF);
             }
