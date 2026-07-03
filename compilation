@@ -1,0 +1,1 @@
+g++ -o 2a1 2.cpp -std=c++17 -pthread -lgpiodcxx -lgpiod
