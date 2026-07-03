@@ -20,7 +20,7 @@ std::string sms_sender;
 bool rx_ok = 0;
 bool wait_ans = 0;
 
-enum State {WAKE_UP = 1, POLLING_SIM, HACK_RF_INTERACTION, CLEARING_SIM_STORAGE, TURN_OFF, IDLE};
+enum State {WAKE_UP = 1, POLLING_SIM, CLEARING_SIM_STORAGE, HACK_RF_INTERACTION, IDLE,TURN_OFF};
 enum hackRFCMD {START_HACKRF = 1, STOP_HACKRF};
 
 void AT_parser(const std::string& line) {
@@ -305,33 +305,42 @@ int main() {
                 rx_ok = false;
                 wait_ans = false;
 
-                if (line.find("+CMGL") != std::string::npos) {
+                if (line.find("+CMGL") != std::string::npos) { // есть непрочитанное сообщение
                     hackrf_cmd = get_sms_content(line);
                     if(hackrf_cmd == START_HACKRF || hackrf_cmd == STOP_HACKRF) {
                         setState(CLEARING_SIM_STORAGE);
                         send_command("AT+CMGD="+get_sms_index(line));
-                        wait_ans = true;
-                    } 
-                } else if (line.find("OK") != std::string::npos) {
+                        //wait_ans = true;
+                    } else {
+                        std::cout << "Содержимое сообщения не распознано, удаление" << std::endl;
+                        setState(CLEARING_SIM_STORAGE);
+                        send_command("AT+CMGD="+get_sms_index(line));
+                    }
+                } else if (line.find("OK") != std::string::npos) { // непрочитанных сообщений нет
                     setState(TURN_OFF);
-                    send_command("AT+CMGD="+get_sms_index(line));
-                    wait_ans = true;
+                    //send_command("AT+CMGD="+get_sms_index(line));
+                    //wait_ans = true;
                     std::cout << "Сообщений нет, отключение устройства" << std::endl;
-                } else {
-                    std::cout << "Нет ответа на прошлый запрос" << std::endl;
                 }
                 break;
             }
-
             break;
         case CLEARING_SIM_STORAGE:
             
             if (rx_ok && (line.find("OK") != std::string::npos)) {
-                setState(HACK_RF_INTERACTION);
                 wait_ans = false;
                 rx_ok = false;
+                if (hackrf_cmd != -1) {
+                    std::cout << "Сообщение удалено, взаимодействие с hackRF" << std::endl;
+                    setState(HACK_RF_INTERACTION);
+                } else {
+                    std::cout << "Сообщение удалено, выключение" << std::endl;
+                    setState(TURN_OFF);
+                }
+                
             } else {
                 std::cout << "Нет ответа на удаление SMS" << std::endl;
+                // доработать логику
             }
             break;
 
