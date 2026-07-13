@@ -27,7 +27,7 @@ std::string sms_sender;
 bool rx_ok = 0;
 bool wait_ans = 0;
 
-enum State {WAKE_UP = 1, POLLING_SIM, CLEARING_SIM_STORAGE, HACK_RF_INTERACTION, IDLE,TURN_OFF};
+enum State {WAKE_UP = 1, POLLING_SIM, DELETING_SMS, HACK_RF_INTERACTION, IDLE,TURN_OFF};
 enum hackRFCMD {START_HACKRF = 1, STOP_HACKRF};
 
 struct sms_t {
@@ -283,6 +283,13 @@ bool parse_notification(const std::string& line) {
     }
 }
 
+bool is_sim_storage_full(line) {
+    
+    
+    
+    return;
+}
+
 std::string get_sms_index_from_notif() {
     return notification.sms_index;
 }
@@ -323,7 +330,7 @@ void start_hackrf_transfer() {
         
         execlp("hackrf_transfer", 
                "hackrf_transfer",
-               "-t", "../../dji_2467mhz_clean.iq",
+               "-t", "/home/u1/dji_2467mhz_clean.iq",
                "-f", "2467000000",
                "-x", "47",
                "-a", "1",
@@ -447,7 +454,8 @@ void gpio_pin_ctrl(int bcm_pin_num, bool state, int delay_mcs=1) {
 }
 
 void powerOff() {
-    gpio_pin_ctrl(17,0,10);
+    //gpio_pin_ctrl(17,0,10);
+    
     return;
 }
 
@@ -507,28 +515,55 @@ int main() {
         
                         if(hackrf_cmd == START_HACKRF || hackrf_cmd == STOP_HACKRF) {
                             std::cout << "Команда распознана" << std::endl;
-                            setState(CLEARING_SIM_STORAGE);
+                            setState(DELETING_SMS);
                             send_command("AT+CMGD="+get_sms_index(line));
                         } else {
                             std::cout << "Команда не распознана" << std::endl;
-                            setState(CLEARING_SIM_STORAGE);
+                            setState(DELETING_SMS);
                             send_command("AT+CMGD="+get_sms_index(line));
                         }
                         
                     } else {
                         std::cout << "Содержимое сообщения не распознано, удаление" << std::endl;
-                        setState(CLEARING_SIM_STORAGE);
+                        setState(DELETING_SMS);
                         send_command("AT+CMGD="+get_sms_index(line));
                     }
                     
                 } else if (line.find("OK") != std::string::npos) { // непрочитанных сообщений нет
-                    setState(TURN_OFF);
-                    std::cout << "Сообщений нет, отключение устройства" << std::endl;
+                    //setState(TURN_OFF);
+                    std::cout << "Сообщений нет, проверка памяти SIM" << std::endl;
+                    send_command("AT+CPMS?");
+                    setState(CHECKING_SIM_STORAGE);
                 }
                 break;
             }
             break;
+            
+        case CHECKING_SIM_STORAGE:
+            if (rx_ok) { 
+                rx_ok = false;
+                if (line.find("+CPMS:") != std::string::npos) {
+                    if(is_sim_storage_full(line)) {
+                        std::cout << "Память для сообщений переполнена, очистка..." << std::endl;
+                        send_command("AT+CMGD=1,4");
+                        setState(CLEARING_SIM_STORAGE);
+                    } else {
+                        std::cout << "Память для сообщений не переполнена, выключение..." << std::endl; 
+                        setState(TURN_OFF);
+                    }
+                }
+            }
+        
         case CLEARING_SIM_STORAGE:
+            
+            if (rx_ok && (line.find("OK") != std::string::npos)) {
+                wait_ans = false;
+                rx_ok = false;
+                std::cout << "Память SIM очищена, выключение..." << std::endl;
+                setState(TURN_OFF); 
+            }
+        
+        case DELETING_SMS:
             
             if (rx_ok && (line.find("OK") != std::string::npos)) {
                 wait_ans = false;
@@ -588,19 +623,19 @@ int main() {
                         
                         if (hackrf_cmd_next == hackrf_cmd) {
                             std::cout << "Заданная команда уже выполняется!" << std::endl;
-                            setState(CLEARING_SIM_STORAGE);
+                            setState(DELETING_SMS);
                             send_command("AT");
                             send_command("AT+CMGD="+get_sms_index(line));
                         } else {
                             if(hackrf_cmd_next == START_HACKRF || hackrf_cmd_next == STOP_HACKRF) {
                                 hackrf_cmd = hackrf_cmd_next;
                                 std::cout << "Команда распознана" << std::endl;
-                                setState(CLEARING_SIM_STORAGE);
+                                setState(DELETING_SMS);
                                 send_command("AT");
                                 send_command("AT+CMGD="+get_sms_index(line));
                             } else {
                                 std::cout << "Команда не распознана" << std::endl;
-                                setState(CLEARING_SIM_STORAGE);
+                                setState(DELETING_SMS);
                                 send_command("AT");
                                 send_command("AT+CMGD="+get_sms_index(line));
                             }
@@ -608,7 +643,7 @@ int main() {
     
                   } else {
                       std::cout << "Содержимое сообщения не распознано, удаление" << std::endl;
-                      setState(CLEARING_SIM_STORAGE);
+                      setState(DELETING_SMS);
                       send_command("AT");
                       send_command("AT+CMGD="+get_sms_index(line));
                   }
