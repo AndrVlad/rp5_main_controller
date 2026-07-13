@@ -1,0 +1,48 @@
+[Sent]: AT+CCLK?
+[Received]:  +CCLK: "04/01/01,01:52:10+00"
+[Received]:  OK
+
+Enter message to send: AT
+[Sent]: AT
+Enter message to send: AT
+[Sent]: AT
+[Received]:  OKo send: 
+AT&W0
+[Sent]: AT&W0
+[Received]:  OKo send: 
+AT          
+[Sent]: AT
+Enter message to send: AT
+[Sent]: AT
+[Received]:  OKo send: 
+
+Enter message to send: AT
+[Sent]: AT
+Enter message to send: AT
+[Sent]: AT
+[Received]:  OKo send: 
+AT+CLTS=1
+[Sent]: AT+CLTS=1
+[Received]:  OKo send: 
+AT&W0
+[Sent]: AT&W0
+[Received]:  OKo send: 
+[Received]:  RDY
+[Received]:  +CFUN: 1
+[Received]:  +CPIN: READY
+[Received]:  *PSUTTZ: 2026,7,10,8,28,53,"+12",0
+[Received]:  DST: 0
+[Received]:  +CIEV: 10,"25001","MTS RUS","MTS RUS", 0, 0
+[Received]:  Call Ready
+[Received]:  SMS Ready
+
+Enter message to send: AT
+[Sent]: AT
+Enter message to send: AT
+[Sent]: AT
+[Received]:  OKo send: 
+AT+CCLK?
+[Sent]: AT+CCLK?
+[Received]:  +CCLK: "26/07/10,11:29:44+12"
+[Received]:  OK
+
