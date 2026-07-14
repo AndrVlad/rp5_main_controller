@@ -15,6 +15,8 @@
 #include <bits/stdc++.h>
 #include <regex>
 
+const char* FILE_PATH = "/mnt/ramdisk/2467.000MHz_20260713_145425_DC+16.iq";
+
 int serial_fd = -1;
 int current_state = 1;
 int hackrf_cmd = -1;
@@ -28,7 +30,7 @@ bool rx_ok = 0;
 bool wait_ans = 0;
 
 enum State {WAKE_UP = 1, POLLING_SIM, DELETING_SMS, CHECKING_SIM_STORAGE, CLEARING_SIM_STORAGE, HACK_RF_INTERACTION, IDLE,TURN_OFF};
-enum hackRFCMD {START_HACKRF = 1, STOP_HACKRF};
+enum hackRFCMD {STOP_HACKRF = 0, START_HACKRF_INF, START_HACKRF};
 
 struct sms_t {
     std::string index;
@@ -306,7 +308,7 @@ bool is_sim_storage_full(const std::string& line) {
         return false;
     }
     
-    if (stoi(used1) == stoi(total1)) {
+    if (stoi(used1) >= (stoi(total1) - 1)) {
         std::cout << "Заполнено" << std::endl;
         return true;
     } else {
@@ -339,12 +341,12 @@ std::string get_notification_sms_index() {
     return notification.sms_index;
 }
 
-void start_hackrf_transfer() {
+void start_hackrf_transfer(bool loop_transfer) {
     if (hackrf_running) {
         std::cout << "HackRF уже запущен" << std::endl;
         return;
     }
-    
+    std::string loop_tx;
     pid_t pid = fork();
     
     if (pid == -1) {
@@ -353,15 +355,28 @@ void start_hackrf_transfer() {
     }
     
     if (pid == 0) {
-        
-        execlp("hackrf_transfer", 
+    
+        if (loop_transfer) {
+          execlp("hackrf_transfer", 
                "hackrf_transfer",
-               "-t", "/home/u1/dji_2467mhz_clean.iq",
+               "-t", FILE_PATH,
                "-f", "2467000000",
                "-x", "47",
                "-a", "1",
-               "-p", "1",
+               "-s", "16000000",
+               "-R",
                nullptr);
+               
+        } else {
+            execlp("hackrf_transfer", 
+               "hackrf_transfer",
+               "-t", FILE_PATH,
+               "-f", "2467000000",
+               "-x", "47",
+               "-a", "1",
+               "-s", "16000000",
+               nullptr);
+        }
         
         std::cerr << "Ошибка запуска hackrf_transfer" << std::endl;
         exit(1);
@@ -481,18 +496,37 @@ void gpio_pin_ctrl(int bcm_pin_num, bool state, int delay_mcs=1) {
 
 void powerOff() {
     //gpio_pin_ctrl(17,0,10);
-    /*
+    
     int result = system("sudo systemctl halt -i");
     
     if (result) {
         std::cout << "Команда завершения не выполнена" << std::endl;
     } else {
         std::cout << "Команда завершения выполнена успешно" << std::endl;
-    } */
+    } 
     return;
 }
 
-// ==================== ОСНОВНАЯ ФУНКЦИЯ ====================
+void mount_tmpfs() {
+    
+    std::cout << "Mounting tempfs ..." << std::endl;
+    system("sudo mkdir -p /mnt/ramdisk");
+    system("sudo mount -t tmpfs -o size=1500M tmpfs /mnt/ramdisk");
+    system("sudo systemctl daemon-reload");
+    system("sudo mount -t tmpfs -o size=1500M tmpfs /mnt/ramdisk");
+    std::cout << "tempfs mounted" << std::endl;
+
+    return;
+}
+
+void copy_files() {
+    system("cp ~/2467.000MHz_20260713_145425_DC+16.iq /mnt/ramdisk");
+    std::cout << "Copying of file end" << std::endl;
+}
+
+void delete_file() {
+  system("rm /mnt/ramdisk/2467.000MHz_20260713_145425_DC+16.iq");
+}
 
 int main() {
     signal(SIGINT, signal_handler);
@@ -502,7 +536,6 @@ int main() {
         return 1;
     }
     
-  
     running=true;
     
     //gpio_pin_set(17, 1);
@@ -547,9 +580,12 @@ int main() {
                         std::cout << "Сообщение разобрано" << std::endl;
                         hackrf_cmd = get_sms_text(line);
         
-                        if(hackrf_cmd == START_HACKRF || hackrf_cmd == STOP_HACKRF) {
+                        if(hackrf_cmd == START_HACKRF || hackrf_cmd == STOP_HACKRF || hackrf_cmd == START_HACKRF_INF) {
                             std::cout << "Команда распознана" << std::endl;
+                            mount_tmpfs();
+                            copy_files();
                             setState(DELETING_SMS);
+                            send_command("AT");
                             send_command("AT+CMGD="+get_sms_index(line));
                         } else {
                             std::cout << "Команда не распознана" << std::endl;
@@ -619,15 +655,17 @@ int main() {
         case HACK_RF_INTERACTION:
             
             if (hackrf_cmd == START_HACKRF) {
-                start_hackrf_transfer();
+                start_hackrf_transfer(0);
                 setState(IDLE);
 
-            } else if(hackrf_cmd == STOP_HACKRF) {
+            } else if (hackrf_cmd == STOP_HACKRF) {
                 stop_hackrf_transfer();
                 setState(TURN_OFF);
                 
+            } else if (hackrf_cmd == START_HACKRF_INF) {
+                start_hackrf_transfer(1);
+                setState(IDLE);
             }
-
             break;
         case IDLE:
             
@@ -661,7 +699,7 @@ int main() {
                             send_command("AT");
                             send_command("AT+CMGD="+get_sms_index(line));
                         } else {
-                            if(hackrf_cmd_next == START_HACKRF || hackrf_cmd_next == STOP_HACKRF) {
+                            if(hackrf_cmd_next == START_HACKRF || hackrf_cmd_next == STOP_HACKRF || hackrf_cmd_next == START_HACKRF_INF) {
                                 hackrf_cmd = hackrf_cmd_next;
                                 std::cout << "Команда распознана" << std::endl;
                                 setState(DELETING_SMS);
@@ -706,8 +744,9 @@ int main() {
 
     //reader_thread.join();
     close_port();
-    std::this_thread::sleep_for(std::chrono::seconds(30));
-    powerOff();
+    //std::this_thread::sleep_for(std::chrono::seconds(30));
+    //powerOff();
+    delete_file();
     std::cout << " Программа завершена" << std::endl;
     return 0;
 }
