@@ -27,7 +27,7 @@ std::string sms_sender;
 bool rx_ok = 0;
 bool wait_ans = 0;
 
-enum State {WAKE_UP = 1, POLLING_SIM, DELETING_SMS, HACK_RF_INTERACTION, IDLE,TURN_OFF};
+enum State {WAKE_UP = 1, POLLING_SIM, DELETING_SMS, CHECKING_SIM_STORAGE, CLEARING_SIM_STORAGE, HACK_RF_INTERACTION, IDLE,TURN_OFF};
 enum hackRFCMD {START_HACKRF = 1, STOP_HACKRF};
 
 struct sms_t {
@@ -283,11 +283,37 @@ bool parse_notification(const std::string& line) {
     }
 }
 
-bool is_sim_storage_full(line) {
+bool is_sim_storage_full(const std::string& line) {
     
+    std::regex pattern(
+        R"(^\+CPMS:\s*\"([^\"]+)\",(\d+),(\d+),\"([^\"]+)\",(\d+),(\d+),\"([^\"]+)\",(\d+),(\d+)\s*)"
+    );
+    std::smatch match;
+
+    std::string mem1, used1, total1;
+
+    if (std::regex_search(line, match, pattern)) {
+        mem1 = match[7].str();
+        used1 = match[8].str();
+        total1 = match[9].str();
+        
+        std::cout << "mem3: " << mem1 << std::endl;
+        std::cout << "used3: " << used1 << std::endl;
+        std::cout << "total3: " << total1 << std::endl;
+
+    } else {
+        std::cerr << "Ошибка: строка не соответствует формату +CPMS" << std::endl;
+        return false;
+    }
     
+    if (stoi(used1) == stoi(total1)) {
+        std::cout << "Заполнено" << std::endl;
+        return true;
+    } else {
+    std::cout << "Не заполнено" << std::endl;
+        return false;
+    }
     
-    return;
 }
 
 std::string get_sms_index_from_notif() {
@@ -455,7 +481,14 @@ void gpio_pin_ctrl(int bcm_pin_num, bool state, int delay_mcs=1) {
 
 void powerOff() {
     //gpio_pin_ctrl(17,0,10);
+    /*
+    int result = system("sudo systemctl halt -i");
     
+    if (result) {
+        std::cout << "Команда завершения не выполнена" << std::endl;
+    } else {
+        std::cout << "Команда завершения выполнена успешно" << std::endl;
+    } */
     return;
 }
 
@@ -469,9 +502,10 @@ int main() {
         return 1;
     }
     
+  
     running=true;
     
-    gpio_pin_set(17, 1);
+    //gpio_pin_set(17, 1);
 
     while (running && serial_fd != -1) {
         std::string line = read_line();
@@ -672,6 +706,7 @@ int main() {
 
     //reader_thread.join();
     close_port();
+    std::this_thread::sleep_for(std::chrono::seconds(30));
     powerOff();
     std::cout << " Программа завершена" << std::endl;
     return 0;
