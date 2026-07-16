@@ -15,6 +15,8 @@
 #include <bits/stdc++.h>
 #include <regex>
 
+#include "timer.h"
+
 const char* FILE_PATH = "/mnt/ramdisk/2467.000MHz_20260713_145425_DC+16.iq";
 
 int serial_fd = -1;
@@ -355,9 +357,8 @@ void start_hackrf_transfer(bool loop_transfer) {
     }
     
     if (pid == 0) {
-    
-        if (loop_transfer) {
-          execlp("hackrf_transfer", 
+        
+        execlp("hackrf_transfer", 
                "hackrf_transfer",
                "-t", FILE_PATH,
                "-f", "2467000000",
@@ -367,20 +368,15 @@ void start_hackrf_transfer(bool loop_transfer) {
                "-R",
                nullptr);
                
-        } else {
-            execlp("hackrf_transfer", 
-               "hackrf_transfer",
-               "-t", FILE_PATH,
-               "-f", "2467000000",
-               "-x", "47",
-               "-a", "1",
-               "-s", "16000000",
-               nullptr);
-        }
-        
         std::cerr << "Ошибка запуска hackrf_transfer" << std::endl;
         exit(1);
     }
+    
+    std::cout << "loop transfer = " << loop_transfer << std::endl;
+    if (!loop_transfer) {
+        std::cout << "timer started" << std::endl;
+        start_timer(180); 
+    } 
     
     hackrf_pid = pid;
     hackrf_running = true;
@@ -655,6 +651,7 @@ int main() {
         case HACK_RF_INTERACTION:
             
             if (hackrf_cmd == START_HACKRF) {
+                std::cout << "Режим с прерыванием по времени" << std::endl;
                 start_hackrf_transfer(0);
                 setState(IDLE);
 
@@ -663,6 +660,7 @@ int main() {
                 setState(TURN_OFF);
                 
             } else if (hackrf_cmd == START_HACKRF_INF) {
+                std::cout << "Непрерывный режим" << std::endl;
                 start_hackrf_transfer(1);
                 setState(IDLE);
             }
@@ -676,7 +674,7 @@ int main() {
                     if(parse_notification(line)) {
                         std::cout << "Уведомление разобрано, получение СМС..." << std::endl;
                         //hackrf_cmd = STOP_HACKRF;
-                        send_command("AT");
+                        //send_command("AT");
                         send_command("AT+CMGR="+get_sms_index_from_notif());
                     } else {
                         std::cout << "Уведомление не разобрано" << std::endl;
@@ -727,6 +725,10 @@ int main() {
                 std::cout << "Передача по hackRF завершена" << std::endl;
                 setState(TURN_OFF);
             }
+            
+            if (is_timer_ovflw()) {
+                stop_hackrf_transfer();
+            }
 
             break;
 
@@ -744,9 +746,10 @@ int main() {
 
     //reader_thread.join();
     close_port();
-    //std::this_thread::sleep_for(std::chrono::seconds(30));
+    //std::this_thread::sleep_for(std::chrono::seconds(40));
     //powerOff();
     delete_file();
+    deinit_timer();
     std::cout << " Программа завершена" << std::endl;
     return 0;
 }
