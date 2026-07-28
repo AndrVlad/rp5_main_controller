@@ -14,6 +14,7 @@ bool is_timer_ovflw() {
 void deinit_timer() {
     stop_timer();
     timer_delete(timerid);
+    timer_ovflw = false;
     return;
 }
 
