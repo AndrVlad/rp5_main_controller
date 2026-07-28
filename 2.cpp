@@ -36,6 +36,20 @@ bool wait_ans, force_start = 0;
 enum State {WAKE_UP = 1, FORCED_START, POLLING_SIM, DELETING_SMS, CHECKING_SIM_STORAGE, CLEARING_SIM_STORAGE, HACK_RF_INTERACTION, IDLE,TURN_OFF, POWER_OFF};
 enum hackRFCMD {STOP_HACKRF = 0, START_HACKRF_INF, START_HACKRF};
 
+const char* stateNames[] = {
+    "",  
+    "WAKE_UP",
+    "FORCED_START",
+    "POLLING_SIM",
+    "DELETING_SMS",
+    "CHECKING_SIM_STORAGE",
+    "CLEARING_SIM_STORAGE",
+    "HACK_RF_INTERACTION",
+    "IDLE",
+    "TURN_OFF",
+    "POWER_OFF"
+};
+
 struct sms_t {
     std::string index;
     std::string status;
@@ -43,7 +57,7 @@ struct sms_t {
     std::string destination;
     std::string date_time;
     std::string text;
-} sms;
+} sms{};
 
 struct notification_t {
     std::string sms_storage;
@@ -115,7 +129,18 @@ void send_command(const std::string& cmd) {
     }
     
     write(serial_fd, data.c_str(), data.length());
-    std::cout << "[Отправлено]: " << cmd << std::endl;
+    std::cout << "[Send]: " << cmd << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+}
+
+void send_sms_content(const std::string& cmd) {
+    if (serial_fd == -1) return;
+    
+    std::string data = cmd;
+    data += "\x1A";
+    
+    write(serial_fd, data.c_str(), data.length());
+    std::cout << "[Send]: " << cmd << std::endl;
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 }
 
@@ -151,54 +176,6 @@ std::string read_line() {
     return result;
 }
 
-void parse_sms_content(const std::string& line) {
-    // Проверяем уведомление о новом SMS: +CMTI: "SM",1
-    if (line.find("+CMTI:") != std::string::npos) {
-        // Извлекаем индекс сообщения
-        size_t pos = line.rfind(',');
-        if (pos != std::string::npos) {
-            std::string index_str = line.substr(pos + 1);
-            // Убираем пробелы
-            index_str.erase(0, index_str.find_first_not_of(" \t"));
-            index_str.erase(index_str.find_last_not_of(" \t") + 1);
-            
-            std::cout << "\nSMS Индекс: " << index_str << std::endl;
-            
-            // Читаем текст сообщения
-            std::string read_cmd = "AT+CMGR=" + index_str;
-            send_command(read_cmd);
-            
-            // Даем время на получение ответа
-            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-            
-            // Читаем ответ (заголовок + текст)
-            std::string header = read_line();
-            std::string text = read_line();
-            
-            // Пропускаем OK
-            std::string ok = read_line();
-            //std::cout << ok << std::endl;
-		//std::cout << text << std::endl;
-//std::cout << header << std::endl;
-//std::string delete_cmd = "AT+CMGD=" + index_str;
-               // send_command(delete_cmd);
-               // std::this_thread::sleep_for(std::chrono::milliseconds(200));
-           // if (!text.empty()) {
-                sms_text = text;
-                sms_received = true;
-                
-                std::cout << " text " << text << " header  " << header << " ok " << ok << std::endl;
-               
-                
-                // Удаляем сообщение после прочтения
-                std::string delete_cmd = "AT+CMGD=" + index_str;
-                send_command(delete_cmd);
-                //std::this_thread::sleep_for(std::chrono::milliseconds(200));
-            //}
-        }
-    }
-}
-
 void signal_handler(int sig) {
     if (sig == SIGINT) {
         std::cout << "\n\n  Остановка программы..." << std::endl;
@@ -207,7 +184,6 @@ void signal_handler(int sig) {
 }
 
 bool parse_sms_list(const std::string& line) {
-    std::cout << "Разбор СМС " << line << std::endl;
     
     std::regex pattern(
         R"(\+CMGL:\s*(\d+),\"([^\"]+)\",\"([^\"]+)\",\"([^\"]*)\",\"([^\"]+)\"\r\n([^\r\n]+))"
@@ -232,13 +208,12 @@ bool parse_sms_list(const std::string& line) {
         return true;
     } else {
         std::cerr << "Ошибка: строка не соответствует формату +CMGL" << std::endl;
+        std::cout << "Полученные данные от SIM800C " << line << std::endl;
         return false;
     }
 }
 
 bool parse_sms(const std::string& line) {
-    std::cout << "Разбор СМС " << line << std::endl;
-	        //R"(\+CMGR:\s*\"([^\"]+)\",\"([^\"]+)\",\"([^\"]*)\",\"([^\"]+)\"\r\n([^\r\n]+)\r\n)"
     
     std::regex pattern(
 	R"(\+CMGR:\s*\"([^\"]+)\",\"([^\"]+)\",\"([^\"]*)\",\"([^\"]+)\"\r\n([^\r\n]+))"
@@ -264,12 +239,12 @@ bool parse_sms(const std::string& line) {
         return true;
     } else {
         std::cerr << "Ошибка: строка не соответствует формату +CMGR" << std::endl;
+        std::cout << "Полученные данные от SIM800C " << line << std::endl;
         return false;
     }
 }
 
 bool parse_notification(const std::string& line) {
-    std::cout << "Разбор уведомления " << line << std::endl;
     
     std::regex pattern(
         R"(\+CMTI:\s*\"([^\"]+)\",(\d+))"
@@ -286,6 +261,7 @@ bool parse_notification(const std::string& line) {
         return true;
     } else {
         std::cerr << "Ошибка: строка не соответствует формату +CMTI" << std::endl;
+        std::cout << "Полученные данные от SIM800C " << line << std::endl;
         return false;
     }
 }
@@ -310,6 +286,7 @@ bool is_sim_storage_full(const std::string& line) {
 
     } else {
         std::cerr << "Ошибка: строка не соответствует формату +CPMS" << std::endl;
+        std::cout << "Полученные данные от SIM800C " << line << std::endl;
         return false;
     }
     
@@ -324,13 +301,35 @@ bool is_sim_storage_full(const std::string& line) {
     
 }
 
+bool send_sms(const std::string& content) {
+    
+     if (sms.source == "") {
+        std::cout << "Получатель неизвестен" << std::endl;
+        return false;
+    }
+    
+    send_command("AT+CMGS="+sms.source+"\"");
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    if (line.find(">") != std::string::npos) {
+        rx_ok = false;
+        send_sms_content(content);
+    } else {
+        std::cout << "Нет ответа от SIM800C" << std::endl;
+        return false;
+    }
+
+    return true;
+
+}
+
 std::string get_sms_index_from_notif() {
     return notification.sms_index;
 }
 
 void setState(int next_state) {
     current_state = next_state;
-    std::cout << "Изменено состояние на " << current_state << std::endl;
+    std::cout << "Изменено состояние на " << stateNames[next_state] << std::endl;
 }
 
 std::string get_sms_index(const std::string& line) {
@@ -495,10 +494,7 @@ void gpio_pin_ctrl(int bcm_pin_num, bool state, int delay_mcs=1) {
 }
 
 void powerOff() {
-    //gpio_pin_ctrl(17,0,10);
-    
     int result = system("sudo poweroff");
-    
     return;
 }
 
@@ -533,28 +529,26 @@ int main() {
     }
     
     running=true;
-    
-    //gpio_pin_set(17, 1);
-    std::this_thread::sleep_for(std::chrono::seconds(15));
 
+    std::this_thread::sleep_for(std::chrono::seconds(15));
 
     while (running && serial_fd != -1) {
         std::string line = read_line();
 
         if (!line.empty()) {
-            std::cout << "[Получено]: " << line << std::endl;
+            std::cout << "[Received]: " << line << std::endl;
             rx_ok = true;
         }
 
         switch (current_state)
         {
-	case FORCED_START:
-	    hackrf_cmd = START_HACKRF_INF;
+	    case FORCED_START:
+	        hackrf_cmd = START_HACKRF_INF;
             hackrf_cmd_prev = hackrf_cmd;
             mount_tmpfs();
             copy_files();
             start_hackrf_transfer(1);
-	    setState(WAKE_UP);
+	        setState(WAKE_UP);
             force_start = true;
     	    break;
 	    
@@ -562,15 +556,17 @@ int main() {
             
             if (!rx_ok) {
                 send_command("AT");
-		poll_sim800c_counter++;
-		if (poll_sim800c_counter >= 10) {
-	            std::cout << "SIM800C doesn't response, start infinitive transfer..." << std::endl;
-		    hackrf_cmd = START_HACKRF_INF;
-		    mount_tmpfs();
+		        poll_sim800c_counter++;
+
+                if (poll_sim800c_counter >= 10) {
+                    std::cout << "SIM800C doesn't response, start infinitive transfer..." << std::endl;
+                    hackrf_cmd = START_HACKRF_INF;
+                    mount_tmpfs();
                     copy_files();
-		    setState(HACK_RF_INTERACTION);
-			
-		}
+                    setState(HACK_RF_INTERACTION);
+                
+                }
+
             } else {
                 rx_ok = false;
                 if (line.find("OK") != std::string::npos) {
@@ -672,9 +668,11 @@ int main() {
         case HACK_RF_INTERACTION:
             
             if (hackrf_cmd == START_HACKRF) {
-	        if (hackrf_cmd_prev == START_HACKRF_INF) {
-		    stop_hackrf_transfer();
-		}
+
+	            if (hackrf_cmd_prev == START_HACKRF_INF) {
+		        stop_hackrf_transfer();
+		        }
+                
                 std::cout << "Режим с прерыванием по времени" << std::endl;
                 start_hackrf_transfer(0);
                 setState(IDLE);
@@ -685,13 +683,14 @@ int main() {
                 
             } else if (hackrf_cmd == START_HACKRF_INF) {
                 if (hackrf_cmd_prev == START_HACKRF) {
-		    stop_hackrf_transfer();
-		}
+		            stop_hackrf_transfer();
+		        }
                 std::cout << "Непрерывный режим" << std::endl;
                 start_hackrf_transfer(1);
                 setState(IDLE);
             }
             break;
+
         case IDLE:
             
             if (rx_ok) {
