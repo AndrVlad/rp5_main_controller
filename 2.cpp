@@ -328,7 +328,7 @@ void send_sms(const std::string& content) {
     }
     
     send_command("AT");
-    send_command("AT+CMGS="+sms_recipient+"\"");
+    send_command("AT+CMGS=\""+sms_recipient+"\"");
     std::this_thread::sleep_for(std::chrono::milliseconds(400));
     std::string line = read_line();
 
