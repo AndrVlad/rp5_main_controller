@@ -450,7 +450,7 @@ void stop_hackrf_transfer() {
                 hackrf_running = false;
                 hackrf_pid = -1;
                 std::cout << "HackRF остановлен" << std::endl;
-                send_sms("Stoopped "+current_action+" mode");
+                send_sms("Stopped "+current_action+" mode");
                 set_current_action(0);
                 return;
             }
@@ -463,7 +463,7 @@ void stop_hackrf_transfer() {
         hackrf_running = false;
         hackrf_pid = -1;
         std::cout << "HackRF принудительно остановлен" << std::endl;
-        send_sms("Sopped "+current_action+" mode");
+        send_sms("Stopped "+current_action+" mode");
         set_current_action(0);
     } else {
         std::cout << "None of the process are running" << std::endl;
@@ -753,6 +753,7 @@ int main() {
             } else if (hackrf_cmd == STOP_HACKRF) {
                 stop_hackrf_transfer();
                 deinit_timer();
+                hackrf_cmd_prev = -1;
                 setState(IDLE);
                 
             } else if (hackrf_cmd == START_HACKRF_INF) {
@@ -836,6 +837,7 @@ int main() {
             if (is_timer_ovflw()) {
                 stop_hackrf_transfer();
 	            deinit_timer();
+                hackrf_cmd_prev = -1;
             }
 
             break;
