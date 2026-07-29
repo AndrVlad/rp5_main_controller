@@ -30,13 +30,14 @@ std::atomic<bool> hackrf_running(false);
 pid_t hackrf_pid = -1;
 std::string sms_text;
 std::string sms_sender;
+std::string sms_recipient;
 bool rx_ok = 0;
 bool wait_ans, force_start = 0;
 
 char current_action = "NONE";
 
 enum State {WAKE_UP = 1, FORCED_START, POLLING_SIM, DELETING_SMS, CHECKING_SIM_STORAGE, CLEARING_SIM_STORAGE, HACK_RF_INTERACTION, IDLE,TURN_OFF, POWER_OFF};
-enum hackRFCMD {STOP_HACKRF = 0, START_HACKRF_INF, START_HACKRF};
+enum hackRFCMD {STOP_HACKRF = 0, START_HACKRF_INF, START_HACKRF, SET_RECIPIENT_NUM};
 
 const char* stateNames[] = {
     "",  
@@ -317,13 +318,13 @@ bool is_sim_storage_full(const std::string& line) {
 
 void send_sms(const std::string& content) {
     
-     if (sms.source == "") {
+     if (sms_recipient == "") {
         std::cout << "The recipient of the message is not known" << std::endl;
         return;
     }
     
     send_command("AT");
-    send_command("AT+CMGS="+sms.source+"\"");
+    send_command("AT+CMGS="+sms_recipient+"\"");
     std::this_thread::sleep_for(std::chrono::milliseconds(400));
 
     if (line.find(">") != std::string::npos) {
@@ -356,6 +357,11 @@ std::string get_sms_index(const std::string& line) {
 int get_sms_text(const std::string& line) {
     
     return std::stoi(sms.text);
+}
+
+void set_sms_recipient() {
+    sms_recipient = sms.source;
+    return;
 }
 
 std::string get_notification_sms_index() {
@@ -653,11 +659,14 @@ int main() {
         
                         if(hackrf_cmd == START_HACKRF || hackrf_cmd == STOP_HACKRF || hackrf_cmd == START_HACKRF_INF) {
                             std::cout << "Команда распознана" << std::endl;
-                            //mount_tmpfs();
-                            //copy_files();
                             setState(DELETING_SMS);
                             send_command("AT");
                             send_command("AT+CMGD="+get_sms_index(line));
+                        } else if (hackrf_cmd == SET_RECIPIENT_NUM) {
+                            set_sms_recipient();
+                            setState(DELETING_SMS);
+                            send_command("AT+CMGD="+get_sms_index(line));   
+                            hackrf_cmd = -1;
                         } else {
                             std::cout << "Команда не распознана" << std::endl;
                             setState(DELETING_SMS);
@@ -780,9 +789,7 @@ int main() {
                         if (hackrf_cmd_next == hackrf_cmd && !force_start) {
                             std::cout << "Заданная команда уже выполняется!" << std::endl;
 		                    force_start = 0;
-                            setState(DELETING_SMS);
-                            send_command("AT");
-                            send_command("AT+CMGD="+get_sms_index(line));
+
                         } else {
                             if(hackrf_cmd_next == START_HACKRF || hackrf_cmd_next == STOP_HACKRF || hackrf_cmd_next == START_HACKRF_INF) {
                                 if (force_start) {
@@ -792,23 +799,22 @@ int main() {
                                 hackrf_cmd_prev = hackrf_cmd;
 				                hackrf_cmd = hackrf_cmd_next;
                                 std::cout << "Команда распознана" << std::endl;
-                                setState(DELETING_SMS);
-                                send_command("AT");
-                                send_command("AT+CMGD="+get_sms_index(line));
+
+                            } else if (hackrf_cmd == SET_RECIPIENT_NUM) {
+                                set_sms_recipient();  
+                                send_sms("Recipient has been set"); 
+                                hackrf_cmd = -1;
                             } else {
                                 std::cout << "Команда не распознана" << std::endl;
-                                setState(DELETING_SMS);
-                                send_command("AT");
-                                send_command("AT+CMGD="+get_sms_index(line));
-                            }
+                            } 
                         }
     
                     } else {
                         std::cout << "Содержимое сообщения не распознано, удаление" << std::endl;
+                    }
                         setState(DELETING_SMS);
                         send_command("AT");
                         send_command("AT+CMGD="+get_sms_index(line));
-                    }
                 }
                 
             }
