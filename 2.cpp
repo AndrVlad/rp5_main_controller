@@ -34,7 +34,7 @@ std::string sms_recipient;
 bool rx_ok = 0;
 bool wait_ans, force_start = 0;
 
-char current_action = "NONE";
+std::string current_action = "NONE";
 
 enum State {WAKE_UP = 1, FORCED_START, POLLING_SIM, DELETING_SMS, CHECKING_SIM_STORAGE, CLEARING_SIM_STORAGE, HACK_RF_INTERACTION, IDLE,TURN_OFF, POWER_OFF};
 enum hackRFCMD {STOP_HACKRF = 0, START_HACKRF_INF, START_HACKRF, SET_RECIPIENT_NUM};
@@ -77,6 +77,10 @@ struct notification_t {
 
 void AT_parser(const std::string& line) {
     return;
+}
+
+std::string get_device_state(int state) {
+    return deviceState[state];
 }
 
 std::string get_notification_sms_index();
@@ -326,6 +330,7 @@ void send_sms(const std::string& content) {
     send_command("AT");
     send_command("AT+CMGS="+sms_recipient+"\"");
     std::this_thread::sleep_for(std::chrono::milliseconds(400));
+    std::string line = read_line();
 
     if (line.find(">") != std::string::npos) {
         rx_ok = false;
