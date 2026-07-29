@@ -805,7 +805,7 @@ int main() {
 				                hackrf_cmd = hackrf_cmd_next;
                                 std::cout << "Команда распознана" << std::endl;
 
-                            } else if (hackrf_cmd == SET_RECIPIENT_NUM) {
+                            } else if (hackrf_cmd_next == SET_RECIPIENT_NUM) {
                                 set_sms_recipient();  
                                 send_sms("Recipient has been set"); 
                                 hackrf_cmd = -1;
