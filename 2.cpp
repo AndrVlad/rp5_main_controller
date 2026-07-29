@@ -33,6 +33,8 @@ std::string sms_sender;
 bool rx_ok = 0;
 bool wait_ans, force_start = 0;
 
+char current_action = "NONE";
+
 enum State {WAKE_UP = 1, FORCED_START, POLLING_SIM, DELETING_SMS, CHECKING_SIM_STORAGE, CLEARING_SIM_STORAGE, HACK_RF_INTERACTION, IDLE,TURN_OFF, POWER_OFF};
 enum hackRFCMD {STOP_HACKRF = 0, START_HACKRF_INF, START_HACKRF};
 
@@ -50,6 +52,12 @@ const char* stateNames[] = {
     "POWER_OFF"
 };
 
+const char* deviceState[] = {
+    "NONE",  
+    "CONTINUOUS",
+    "TIME"
+};
+
 struct sms_t {
     std::string index;
     std::string status;
@@ -63,6 +71,8 @@ struct notification_t {
     std::string sms_storage;
     std::string sms_index;
 } notification;
+
+
 
 void AT_parser(const std::string& line) {
     return;
@@ -174,6 +184,10 @@ std::string read_line() {
     }
     
     return result;
+}
+
+void set_current_action (int action) {
+    current_action = deviceState[action];
 }
 
 void signal_handler(int sig) {
@@ -301,25 +315,27 @@ bool is_sim_storage_full(const std::string& line) {
     
 }
 
-bool send_sms(const std::string& content) {
+void send_sms(const std::string& content) {
     
      if (sms.source == "") {
-        std::cout << "Получатель неизвестен" << std::endl;
-        return false;
+        std::cout << "The recipient of the message is not known" << std::endl;
+        return;
     }
     
+    send_command("AT");
     send_command("AT+CMGS="+sms.source+"\"");
-    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    std::this_thread::sleep_for(std::chrono::milliseconds(400));
 
     if (line.find(">") != std::string::npos) {
         rx_ok = false;
         send_sms_content(content);
     } else {
-        std::cout << "Нет ответа от SIM800C" << std::endl;
-        return false;
+        std::cout << "SIM800C did not response on AT+CMGS" << std::endl;
+        return;
     }
 
-    return true;
+    std::cout << "SMS send on SIM800C" << std::endl;
+    return;
 
 }
 
@@ -329,7 +345,7 @@ std::string get_sms_index_from_notif() {
 
 void setState(int next_state) {
     current_state = next_state;
-    std::cout << "Изменено состояние на " << stateNames[next_state] << std::endl;
+    std::cout << "Changed state on " << stateNames[next_state] << std::endl;
 }
 
 std::string get_sms_index(const std::string& line) {
@@ -348,14 +364,22 @@ std::string get_notification_sms_index() {
 
 void start_hackrf_transfer(bool loop_transfer) {
     if (hackrf_running) {
-        std::cout << "HackRF уже запущен" << std::endl;
+        std::cout << "HackRF already running" << std::endl;
+        send_sms("Process of "+current_action+" is already running");
         return;
     }
     std::string loop_tx;
     pid_t pid = fork();
     
     if (pid == -1) {
-        std::cerr << "Ошибка fork()" << std::endl;
+        std::cerr << "fork() error" << std::endl;
+
+        if (!loop_transfer) {
+            send_sms("Error: Process of "+get_device_state(2)+" is not running");
+        } else {
+            send_sms("Error: Process of "+get_device_state(1)+" is not running");
+        }
+
         return;
     }
     
@@ -372,18 +396,33 @@ void start_hackrf_transfer(bool loop_transfer) {
                nullptr);
                
         std::cerr << "Ошибка запуска hackrf_transfer" << std::endl;
+
+        if (!loop_transfer) {
+            send_sms("Error: Process of "+get_device_state(2)+" is not running");
+        } else {
+            send_sms("Error: Process of "+get_device_state(1)+" is not running");
+        }
         exit(1);
     }
     
     std::cout << "loop transfer = " << loop_transfer << std::endl;
     if (!loop_transfer) {
         std::cout << "timer started" << std::endl;
-        start_timer(10); 
+        start_timer(180); 
     } 
     
     hackrf_pid = pid;
     hackrf_running = true;
     std::cout << "HackRF запущен (PID: " << pid << ")" << std::endl;
+
+    if (!loop_transfer) {
+        set_current_action(2);
+        send_sms("Process of "+current_action+" is running");
+    } else {
+        set_current_action(1);
+        send_sms("Process of "+current_action+" is running");
+    }
+
     return;
 }
 
@@ -400,6 +439,8 @@ void stop_hackrf_transfer() {
                 hackrf_running = false;
                 hackrf_pid = -1;
                 std::cout << "HackRF остановлен" << std::endl;
+                send_sms("Stoopped "+current_action+" mode");
+                set_current_action(0);
                 return;
             }
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -411,6 +452,11 @@ void stop_hackrf_transfer() {
         hackrf_running = false;
         hackrf_pid = -1;
         std::cout << "HackRF принудительно остановлен" << std::endl;
+        send_sms("Sopped "+current_action+" mode");
+        set_current_action(0);
+    } else {
+        std::cout << "None of the process are running" << std::endl;
+        send_sms("None of the process are running");
     }
 }
 
@@ -537,7 +583,19 @@ int main() {
 
         if (!line.empty()) {
             std::cout << "[Received]: " << line << std::endl;
+            
+            if (line.find("+CMGS:") != std::string::npos) {
+                rx_ok = false;
+                std::cout << "SMS sending successfull" << std::endl;
+            }
+
+            if (line.find("+CMS ERROR:") != std::string::npos) {
+                rx_ok = false;
+                std::cout << "SMS sending error" << std::endl;
+            }
+
             rx_ok = true;
+
         }
 
         switch (current_state)
@@ -701,7 +759,7 @@ int main() {
                         std::cout << "Уведомление разобрано, получение СМС..." << std::endl;
                         //hackrf_cmd = STOP_HACKRF;
                         send_command("AT");
-    			std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    			        std::this_thread::sleep_for(std::chrono::milliseconds(200));
 
                         send_command("AT+CMGR="+get_sms_index_from_notif());
                     } else {
@@ -721,17 +779,18 @@ int main() {
                         
                         if (hackrf_cmd_next == hackrf_cmd && !force_start) {
                             std::cout << "Заданная команда уже выполняется!" << std::endl;
-		            force_start = 0;
+		                    force_start = 0;
                             setState(DELETING_SMS);
                             send_command("AT");
                             send_command("AT+CMGD="+get_sms_index(line));
                         } else {
                             if(hackrf_cmd_next == START_HACKRF || hackrf_cmd_next == STOP_HACKRF || hackrf_cmd_next == START_HACKRF_INF) {
                                 if (force_start) {
-				   force_start = false;
-				}
-				hackrf_cmd_prev = hackrf_cmd;
-				hackrf_cmd = hackrf_cmd_next;
+				                    force_start = false;
+				                }
+				                
+                                hackrf_cmd_prev = hackrf_cmd;
+				                hackrf_cmd = hackrf_cmd_next;
                                 std::cout << "Команда распознана" << std::endl;
                                 setState(DELETING_SMS);
                                 send_command("AT");
@@ -744,13 +803,13 @@ int main() {
                             }
                         }
     
-                  } else {
-                      std::cout << "Содержимое сообщения не распознано, удаление" << std::endl;
-                      setState(DELETING_SMS);
-                      send_command("AT");
-                      send_command("AT+CMGD="+get_sms_index(line));
-                  }
-              }
+                    } else {
+                        std::cout << "Содержимое сообщения не распознано, удаление" << std::endl;
+                        setState(DELETING_SMS);
+                        send_command("AT");
+                        send_command("AT+CMGD="+get_sms_index(line));
+                    }
+                }
                 
             }
 /*
@@ -761,14 +820,14 @@ int main() {
             
             if (is_timer_ovflw()) {
                 stop_hackrf_transfer();
-	        deinit_timer();
+	            deinit_timer();
             }
 
             break;
 
         case TURN_OFF:
             send_command("AT");
-	    send_command("AT+CPMS?");
+	        send_command("AT+CPMS?");
             setState(CHECKING_SIM_STORAGE);
  	    next_state = POWER_OFF;
             //running = false;
