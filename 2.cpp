@@ -376,7 +376,7 @@ std::string get_notification_sms_index() {
 void start_hackrf_transfer(bool loop_transfer) {
     if (hackrf_running) {
         std::cout << "HackRF already running" << std::endl;
-        send_sms("Process of "+current_action+" is already running");
+        send_sms(current_action+" mode is already running");
         return;
     }
     std::string loop_tx;
@@ -386,9 +386,9 @@ void start_hackrf_transfer(bool loop_transfer) {
         std::cerr << "fork() error" << std::endl;
 
         if (!loop_transfer) {
-            send_sms("Error: Process of "+get_device_state(2)+" is not running");
+            send_sms("Error: "+get_device_state(2)+" is not running");
         } else {
-            send_sms("Error: Process of "+get_device_state(1)+" is not running");
+            send_sms("Error: "+get_device_state(1)+" mode is not running");
         }
 
         return;
@@ -409,9 +409,9 @@ void start_hackrf_transfer(bool loop_transfer) {
         std::cerr << "Ошибка запуска hackrf_transfer" << std::endl;
 
         if (!loop_transfer) {
-            send_sms("Error: Process of "+get_device_state(2)+" is not running");
+            send_sms("Error: "+get_device_state(2)+" mode is not running");
         } else {
-            send_sms("Error: Process of "+get_device_state(1)+" is not running");
+            send_sms("Error: "+get_device_state(1)+" mode is not running");
         }
         exit(1);
     }
@@ -428,10 +428,10 @@ void start_hackrf_transfer(bool loop_transfer) {
 
     if (!loop_transfer) {
         set_current_action(2);
-        send_sms("Process of "+current_action+" is running");
+        send_sms(current_action+" mode is running");
     } else {
         set_current_action(1);
-        send_sms("Process of "+current_action+" is running");
+        send_sms(current_action+" mode is running");
     }
 
     return;
@@ -814,6 +814,8 @@ int main() {
                                 set_sms_recipient();  
                                 send_sms("Recipient has been set"); 
                                 hackrf_cmd = -1;
+                                std::this_thread::sleep_for(std::chrono::seconds(15));
+                                send_sms("Current mode: "+current_action);
                             } else {
                                 std::cout << "Команда не распознана" << std::endl;
                             } 
