@@ -603,10 +603,9 @@ int main() {
             if (line.find("+CMS ERROR:") != std::string::npos) {
                 rx_ok = false;
                 std::cout << "SMS sending error" << std::endl;
+            } else {
+                rx_ok = true;
             }
-
-            rx_ok = true;
-
         }
 
         switch (current_state)
@@ -742,7 +741,9 @@ int main() {
             if (hackrf_cmd == START_HACKRF) {
 
 	            if (hackrf_cmd_prev == START_HACKRF_INF) {
-		        stop_hackrf_transfer();
+		            stop_hackrf_transfer();
+                    deinit_timer();
+                    std::this_thread::sleep_for(std::chrono::seconds(3));
 		        }
                 
                 std::cout << "Режим с прерыванием по времени" << std::endl;
@@ -751,11 +752,14 @@ int main() {
 
             } else if (hackrf_cmd == STOP_HACKRF) {
                 stop_hackrf_transfer();
+                deinit_timer();
                 setState(IDLE);
                 
             } else if (hackrf_cmd == START_HACKRF_INF) {
                 if (hackrf_cmd_prev == START_HACKRF) {
-		            stop_hackrf_transfer();
+                    stop_hackrf_transfer();
+		            deinit_timer();
+                    std::this_thread::sleep_for(std::chrono::seconds(3));
 		        }
                 std::cout << "Непрерывный режим" << std::endl;
                 start_hackrf_transfer(1);
