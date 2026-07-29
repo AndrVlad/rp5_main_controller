@@ -587,7 +587,7 @@ int main() {
     
     running=true;
 
-    std::this_thread::sleep_for(std::chrono::seconds(15));
+    //std::this_thread::sleep_for(std::chrono::seconds(15));
 
     while (running && serial_fd != -1) {
         std::string line = read_line();
@@ -857,10 +857,10 @@ int main() {
 
     //reader_thread.join();
     close_port();
-    std::this_thread::sleep_for(std::chrono::seconds(15));
+    //std::this_thread::sleep_for(std::chrono::seconds(15));
     delete_file();
     deinit_timer();
-    powerOff();
+    //powerOff();
     std::cout << " Программа завершена" << std::endl;
     return 0;
 }
