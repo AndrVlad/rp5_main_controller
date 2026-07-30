@@ -472,23 +472,35 @@ void stop_hackrf_transfer() {
 }
 
 bool is_hackrf_transfer_running() {
-    if (!hackrf_running || hackrf_pid <= 0) {
+
+    if (hackrf_pid <= 0 || !hackrf_running) {
         return false;
     }
     
-    // Проверяем, жив ли процесс
     int status;
     pid_t result = waitpid(hackrf_pid, &status, WNOHANG);
     
-    if (result == hackrf_pid) {
-        // Процесс завершился
+    if (result > 0) {
         hackrf_running = false;
         hackrf_pid = -1;
-        std::cout << "HackRF завершил работу (статус: " << WEXITSTATUS(status) << ")" << std::endl;
         return false;
     }
     
     return true;
+}
+
+void check_hackrf_transfer() {
+    
+    if (!is_hackrf_transfer_running() && current_action != "NONE") {
+        
+        hackrf_cmd_prev = -1;
+        hackrf_cmd = -1;
+
+        deinit_timer();
+        set_current_action(0);
+        send_sms("Error: HackRF transfer stopped unexpectedly. Current mode: "+current_action);
+    }
+    
 }
 
 void gpio_pin_set(int bcm_pin_num, bool state) {
@@ -841,7 +853,10 @@ int main() {
                 stop_hackrf_transfer();
 	            deinit_timer();
                 hackrf_cmd_prev = -1;
+                hackrf_cmd = -1;
             }
+
+            check_hackrf_transfer();
 
             break;
 
