@@ -498,6 +498,7 @@ void check_hackrf_transfer() {
 
         deinit_timer();
         set_current_action(0);
+        std::cout << "Error: HackRF transfer stopped unexpectedly" << std::endl;
         send_sms("Error: HackRF transfer stopped unexpectedly. Current mode: "+current_action);
     }
     
@@ -881,10 +882,10 @@ int main() {
 
     //reader_thread.join();
     close_port();
-    std::this_thread::sleep_for(std::chrono::seconds(15));
+ //   std::this_thread::sleep_for(std::chrono::seconds(15));
     delete_file();
     deinit_timer();
-    powerOff();
+//    powerOff();
     std::cout << " Программа завершена" << std::endl;
     return 0;
 }
