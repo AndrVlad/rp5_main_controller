@@ -613,6 +613,7 @@ int main() {
 	    case FORCED_START:
 	        hackrf_cmd = START_HACKRF_INF;
             hackrf_cmd_prev = hackrf_cmd;
+            current_action = "CONTINUOUS";
             mount_tmpfs();
             copy_files();
             start_hackrf_transfer(1);
@@ -663,23 +664,24 @@ int main() {
         
                         if(hackrf_cmd == START_HACKRF || hackrf_cmd == STOP_HACKRF || hackrf_cmd == START_HACKRF_INF) {
                             std::cout << "Команда распознана" << std::endl;
-                            setState(DELETING_SMS);
-                            send_command("AT");
-                            send_command("AT+CMGD="+get_sms_index(line));
+
                         } else if (hackrf_cmd == SET_RECIPIENT_NUM) {
-                            set_sms_recipient();
-                            setState(DELETING_SMS);
-                            send_command("AT+CMGD="+get_sms_index(line));   
+                            set_sms_recipient();  
+                            send_sms("Recipient has been set. Current mode: "+current_action); 
                             hackrf_cmd = -1;
+  
                         } else {
                             std::cout << "Команда не распознана" << std::endl;
-                            setState(DELETING_SMS);
-                            send_command("AT+CMGD="+get_sms_index(line));
                         }
+
+                        setState(DELETING_SMS);
+                        send_command("AT");
+                        send_command("AT+CMGD="+get_sms_index(line)); 
                         
                     } else {
                         std::cout << "Содержимое сообщения не распознано, удаление" << std::endl;
                         setState(DELETING_SMS);
+                        send_command("AT");
                         send_command("AT+CMGD="+get_sms_index(line));
                     }
                     
@@ -703,7 +705,7 @@ int main() {
                         setState(CLEARING_SIM_STORAGE);
                     } else {
                         std::cout << "Память для сообщений не переполнена, go to idle..." << std::endl;
-	                setState(IDLE);
+	                    setState(IDLE);
                     }
                 }
             }
@@ -714,7 +716,7 @@ int main() {
                 wait_ans = false;
                 rx_ok = false;
                 std::cout << "Память SIM очищена, go to idle..." << std::endl;
-		setState(IDLE); 
+		        setState(IDLE); 
             }
         
         case DELETING_SMS:
@@ -812,10 +814,9 @@ int main() {
 
                             } else if (hackrf_cmd_next == SET_RECIPIENT_NUM) {
                                 set_sms_recipient();  
-                                send_sms("Recipient has been set"); 
+                                send_sms("Recipient has been set. Current mode: "+current_action); 
                                 hackrf_cmd = -1;
-                                std::this_thread::sleep_for(std::chrono::seconds(15));
-                                send_sms("Current mode: "+current_action);
+
                             } else {
                                 std::cout << "Команда не распознана" << std::endl;
                             } 
