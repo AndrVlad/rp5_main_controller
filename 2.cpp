@@ -613,7 +613,7 @@ int main() {
 	    case FORCED_START:
 	        hackrf_cmd = START_HACKRF_INF;
             hackrf_cmd_prev = hackrf_cmd;
-            current_action = "CONTINUOUS";
+            set_current_action(1);
             mount_tmpfs();
             copy_files();
             start_hackrf_transfer(1);
