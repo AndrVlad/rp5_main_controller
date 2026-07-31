@@ -746,7 +746,7 @@ int main() {
                     setState(IDLE);
                 }
                 
-            } else {
+            } else if (rx_ok && !line.find("OK")) {
                 // доработать логику
                 std::cout << "Нет ответа на удаление SMS" << std::endl;
                 setState(IDLE);
