@@ -731,6 +731,7 @@ int main() {
                 std::cout << "Память SIM очищена, go to idle..." << std::endl;
 		        setState(IDLE); 
             }
+            break;
         
         case DELETING_SMS:
             
@@ -746,8 +747,9 @@ int main() {
                 }
                 
             } else {
-                //std::cout << "Нет ответа на удаление SMS" << std::endl;
                 // доработать логику
+                std::cout << "Нет ответа на удаление SMS" << std::endl;
+                setState(IDLE);
             }
             break;
 
