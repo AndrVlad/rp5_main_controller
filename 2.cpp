@@ -341,6 +341,7 @@ void send_sms(const std::string& content) {
     }
 
     std::cout << "SMS send on SIM800C" << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(5));
     return;
 
 }
