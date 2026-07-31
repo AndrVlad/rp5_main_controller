@@ -651,7 +651,7 @@ void sim800c_init() {
 int main() {
     signal(SIGINT, signal_handler);
     
-    serial_fd = open_port("/dev/ttyAMA0", 9600);
+    serial_fd = open_port("/dev/ttyAMA0", 115200);
     if (serial_fd == -1) {
         return 1;
     }
