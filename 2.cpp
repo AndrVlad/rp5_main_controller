@@ -15,7 +15,13 @@
 #include <bits/stdc++.h>
 #include <regex>
 
+#include "src/ina219.h"
+
 #include "timer.h"
+
+#define MINIMAL_BATTERY_VOLTAGE_V 10
+#define MINIMAL_LOAD_CURRENT_A 1
+
 
 const char* FILE_PATH = "/mnt/ramdisk/2467.000MHz_20260713_145425_DC+16.iq";
 
@@ -37,7 +43,9 @@ bool wait_ans, force_start = 0;
 std::string current_action = "NONE";
 
 enum State {WAKE_UP = 1, FORCED_START, POLLING_SIM, DELETING_SMS, CHECKING_SIM_STORAGE, CLEARING_SIM_STORAGE, HACK_RF_INTERACTION, IDLE,TURN_OFF, POWER_OFF};
-enum hackRFCMD {STOP_HACKRF = 0, START_HACKRF_INF, START_HACKRF, SET_RECIPIENT_NUM};
+enum hackRFCMD {STOP_HACKRF = 0, START_HACKRF_INF, START_HACKRF, SET_RECIPIENT_NUM, GET_BAT_VOLTAGE = 10};
+
+INA219* i = nullptr;
 
 const char* stateNames[] = {
     "",  
@@ -428,10 +436,24 @@ void start_hackrf_transfer(bool loop_transfer) {
 
     if (!loop_transfer) {
         set_current_action(2);
-        send_sms(current_action+" mode is running");
     } else {
         set_current_action(1);
+    }
+
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+
+    if (check_load_current()) {
         send_sms(current_action+" mode is running");
+    } else {
+        hackrf_cmd_prev = -1;
+        hackrf_cmd = -1;
+
+        deinit_timer();
+        set_current_action(0);
+        std::cout << "Error: HackRF transfer is not started. Current val: " << std::to_string() << "A" << std::endl;
+        stop_hackrf_transfer();
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+        send_sms("Error: HackRF transfer is not started. Current mode: NONE");
     }
 
     return;
@@ -592,8 +614,68 @@ void delete_file() {
 
 void check_battery_voltage() {
     
+    float sup_voltage = 0;
+    sup_voltage = get_battery_voltage();
+
+    if (sup_voltage <= MINIMAL_BATTERY_VOLTAGE_V) {
+        std::string sup_voltage_str = std::to_string(sup_voltage);
+        std::cout << "Battery voltage low. Current voltage " << sup_voltage_str << std::endl;
+        send_sms("Warning: Battery voltage low. Current voltage = "+sup_voltage_str+" V");
+    }
     
+    return;
+}
+
+bool check_load_current() {
+
+    if(is_hackrf_transfer_running() && current_action != "NONE") {
+        
+        float current = get_load_current();
+        if (get_load_current() <= MINIMAL_LOAD_CURRENT_A) {
+            return false;
+        }
+        else {
+            return true;
+        }
+    } else {
+        return false;
+    }
+}
+
+float get_battery_voltage() {
+
+    float sup_voltage = 0;
+    i->wake();
+    sup_voltage = i->supply_voltage();
+    i->sleep();
+
+    /* ONLY FOR DEBUG */
+    sup_voltage = 12.1;
+
+    return sup_voltage;
+}
+
+float get_load_current() {
+    float load_current = 0;
+    i->wake();
+    load_current = i->current();
+    /* ONLY FOR DEBUG */
+    load_current = 1000;
+
+    load_current /= 1000;
+    i->sleep();
+
+    return load_current;
+}
+
+void ina219_init() {
     
+    float SHUNT_OHMS = 0.1;
+    float MAX_EXPECTED_AMPS = 3.2;
+    
+    i = new INA219(SHUNT_OHMS, MAX_EXPECTED_AMPS);
+    i->configure(RANGE_16V, GAIN_8_320MV, ADC_12BIT, ADC_12BIT);
+
     return;
 }
 
@@ -607,6 +689,8 @@ int main() {
     
     running=true;
 
+    ina219_init();
+
     //std::this_thread::sleep_for(std::chrono::seconds(15));
 
     while (running && serial_fd != -1) {
@@ -618,14 +702,17 @@ int main() {
             if (line.find("+CMGS:") != std::string::npos) {
                 rx_ok = false;
                 std::cout << "SMS sending successfull" << std::endl;
+                break;
             }
 
             if (line.find("+CMS ERROR:") != std::string::npos) {
                 rx_ok = false;
                 std::cout << "SMS sending error" << std::endl;
-            } else {
-                rx_ok = true;
-            }
+                break;
+            } 
+                
+            rx_ok = true;
+            
         }
 
         switch (current_state)
@@ -690,6 +777,11 @@ int main() {
                             send_sms("Recipient has been set. Current mode: "+current_action); 
                             hackrf_cmd = -1;
   
+                        } else if (hackrf_cmd == GET_BAT_VOLTAGE) {
+                            float voltage = get_battery_voltage();
+                            std::string voltage_str = std::to_string(voltage);
+                            send_sms("Battery voltage: "+voltage_str+"V"); 
+                            hackrf_cmd = -1;
                         } else {
                             std::cout << "Команда не распознана" << std::endl;
                         }
@@ -769,7 +861,7 @@ int main() {
 		        }
                 
                 std::cout << "Режим с прерыванием по времени" << std::endl;
-                start_hackrf_transfer(0);
+                start_hackrf_transfer(0);  
                 setState(IDLE);
 
             } else if (hackrf_cmd == STOP_HACKRF) {
@@ -837,6 +929,12 @@ int main() {
                                 send_sms("Recipient has been set. Current mode: "+current_action); 
                                 hackrf_cmd = -1;
 
+                            } else if (hackrf_cmd_next == GET_BAT_VOLTAGE){
+                                float voltage = get_battery_voltage();
+                                std::string voltage_str = std::to_string(voltage);
+                                send_sms("Battery voltage: "+voltage_str+"V"); 
+                                hackrf_cmd = -1;
+
                             } else {
                                 std::cout << "Команда не распознана" << std::endl;
                             } 
@@ -865,9 +963,7 @@ int main() {
             }
 
             check_hackrf_transfer();
-
             check_battery_voltage();
-
             break;
 
         case TURN_OFF:
