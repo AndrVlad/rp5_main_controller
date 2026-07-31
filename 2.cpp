@@ -590,6 +590,13 @@ void delete_file() {
   system("rm /mnt/ramdisk/2467.000MHz_20260713_145425_DC+16.iq");
 }
 
+void check_battery_voltage() {
+    
+    
+    
+    return;
+}
+
 int main() {
     signal(SIGINT, signal_handler);
     
@@ -858,6 +865,8 @@ int main() {
             }
 
             check_hackrf_transfer();
+
+            check_battery_voltage();
 
             break;
 
