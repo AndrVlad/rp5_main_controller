@@ -591,10 +591,67 @@ void delete_file() {
   system("rm /mnt/ramdisk/2467.000MHz_20260713_145425_DC+16.iq");
 }
 
+void sim800c_init() {
+    
+    bool init_end = false;
+    int init_step = 0;
+
+    send_command("AT");
+
+    while (!init_end) {
+        
+        std::string line = read_line();
+        
+
+        if (!line.empty()) {
+            switch (init_step) {
+                case 0:
+                    if(line.find("OK") && != std::string::npos) {
+                        send_command("AT+CMGF=1");
+                        init_step++; 
+                    } 
+                    break;
+                case 1:
+                    if(line.find("OK") && != std::string::npos) {
+                        send_command("AT+CPMS=\"SM\",\"SM\",\"SM\"");
+                        init_step++; 
+                    } 
+                    break;
+                case 2:
+                    if(line.find("OK") && != std::string::npos) {
+                        send_command("ATE0");
+                        init_step++;
+                    }
+                    break;
+                case 3:
+                    if(line.find("OK") && != std::string::npos) {
+                        send_command("AT&W0");
+                        init_step++;
+                    }
+                    break;
+                case 4: 
+                    if (line.find("OK") && != std::string::npos) {
+                        init_end;
+                    }
+                    break;
+            }
+        } else {
+            send_command("AT");
+        }
+
+    }
+    
+    send_command("AT");
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    
+    return;
+}
+
 int main() {
     signal(SIGINT, signal_handler);
     
-    serial_fd = open_port("/dev/ttyAMA0", 115200);
+    serial_fd = open_port("/dev/ttyAMA0", 9600);
     if (serial_fd == -1) {
         return 1;
     }
