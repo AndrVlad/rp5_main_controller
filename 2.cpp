@@ -353,6 +353,11 @@ std::string get_sms_index_from_notif() {
 void setState(int next_state) {
     current_state = next_state;
     std::cout << "Changed state on " << stateNames[next_state] << std::endl;
+
+    if (next_state == DELETING_SMS) {
+        start_timer(TIM_WAIT_ACK,2);
+    }
+
 }
 
 std::string get_sms_index(const std::string& line) {
@@ -420,7 +425,7 @@ void start_hackrf_transfer(bool loop_transfer) {
     std::cout << "loop transfer = " << loop_transfer << std::endl;
     if (!loop_transfer) {
         std::cout << "timer started" << std::endl;
-        start_timer(180); 
+        start_timer(TIM_HACKRF, 180); 
     } 
     
     hackrf_pid = pid;
@@ -497,7 +502,7 @@ void check_hackrf_transfer() {
         hackrf_cmd_prev = -1;
         hackrf_cmd = -1;
 
-        deinit_timer();
+        stop_timer(TIM_HACKRF);
         set_current_action(0);
         std::cout << "Error: HackRF transfer stopped unexpectedly" << std::endl;
         send_sms("Error: HackRF transfer stopped unexpectedly. Current mode: "+current_action);
@@ -796,6 +801,8 @@ int main() {
             if (rx_ok && (line.find("OK") != std::string::npos)) {
                 wait_ans = false;
                 rx_ok = false;
+                stop_timer(TIM_WAIT_ACK);
+                try_get_ack_cnt = 0;
                 if (hackrf_cmd != -1) {
                     std::cout << "Сообщение удалено, взаимодействие с hackRF" << std::endl;
                     setState(HACK_RF_INTERACTION);
@@ -804,10 +811,21 @@ int main() {
                     setState(IDLE);
                 }
                 
-            } else if (rx_ok && !line.find("OK")) {
-                // доработать логику
-                std::cout << "Нет ответа на удаление SMS" << std::endl;
-                setState(IDLE);
+            } else if (is_timer_ovflw(TIM_WAIT_ACK)) {
+                if (try_get_ack_cnt > 3) {
+                        std::cout << "Нет ответов на удаление SMS" << std::endl;
+                        try_get_ack_cnt = 0;
+                        stop_timer(TIM_WAIT_ACK);
+                        setState(IDLE);
+                } else {
+                    std::cout << "Нет ответа на удаление SMS, попытка удалить снова..." << std::endl;
+                    send_command("AT");
+                    send_command("AT+CMGD="+get_sms_index(line));
+
+                    stop_timer(TIM_WAIT_ACK);
+                    start_timer(TIM_WAIT_ACK,2);
+                    try_get_ack_cnt++;
+                }  
             }
             break;
 
@@ -817,7 +835,7 @@ int main() {
 
 	            if (hackrf_cmd_prev == START_HACKRF_INF) {
 		            stop_hackrf_transfer();
-                    deinit_timer();
+                    stop_timer(TIM_HACKRF);
                     std::this_thread::sleep_for(std::chrono::seconds(3));
 		        }
                 
@@ -827,14 +845,14 @@ int main() {
 
             } else if (hackrf_cmd == STOP_HACKRF) {
                 stop_hackrf_transfer();
-                deinit_timer();
+                stop_timer(TIM_HACKRF);
                 hackrf_cmd_prev = -1;
                 setState(IDLE);
                 
             } else if (hackrf_cmd == START_HACKRF_INF) {
                 if (hackrf_cmd_prev == START_HACKRF) {
                     stop_hackrf_transfer();
-		            deinit_timer();
+		            stop_timer(TIM_HACKRF);
                     std::this_thread::sleep_for(std::chrono::seconds(3));
 		        }
                 std::cout << "Непрерывный режим" << std::endl;
@@ -910,9 +928,9 @@ int main() {
                 setState(IDLE);
             } */
             
-            if (is_timer_ovflw()) {
+            if (is_timer_ovflw(TIM_HACKRF)) {
                 stop_hackrf_transfer();
-	            deinit_timer();
+	            stop_timer(TIM_HACKRF);
                 hackrf_cmd_prev = -1;
                 hackrf_cmd = -1;
             }
@@ -944,7 +962,7 @@ int main() {
     close_port();
  //   std::this_thread::sleep_for(std::chrono::seconds(15));
     delete_file();
-    deinit_timer();
+    stop_timer(TIM_HACKRF);
 //    powerOff();
     std::cout << " Программа завершена" << std::endl;
     return 0;
