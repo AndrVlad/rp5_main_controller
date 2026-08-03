@@ -625,7 +625,7 @@ float get_battery_voltage() {
 
     /* ONLY FOR DEBUG */
     //sup_voltage = 12.1;
-
+    sup_voltage = std::trunc(sup_voltage* 10^2) / 10^2;
     return sup_voltage;
 }
 
@@ -636,7 +636,7 @@ float get_load_current() {
     /* ONLY FOR DEBUG */
     //load_current = 1000;
     i->sleep();
-
+    load_current = std::trunc(load_current);
     return load_current;
 }
 
