@@ -23,7 +23,7 @@ int serial_fd = -1;
 int current_state = 2;
 int next_state = -1;
 int hackrf_cmd, hackrf_cmd_prev = -1;
-int poll_sim800c_counter = 0;
+int poll_sim800c_counter, try_get_ack_cnt = 0;
 std::atomic<bool> running(true);
 std::atomic<bool> sms_received(false);
 std::atomic<bool> hackrf_running(false);
