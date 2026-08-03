@@ -625,7 +625,7 @@ float get_battery_voltage() {
 
     /* ONLY FOR DEBUG */
     //sup_voltage = 12.1;
-    sup_voltage = std::trunc(sup_voltage* 10^2) / 10^2;
+    sup_voltage = std::trunc(sup_voltage* 100) / 100;
     return sup_voltage;
 }
 
