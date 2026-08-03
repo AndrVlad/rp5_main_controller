@@ -616,68 +616,6 @@ void delete_file() {
   system("rm /mnt/ramdisk/2467.000MHz_20260713_145425_DC+16.iq");
 }
 
-void check_battery_voltage() {
-    
-    float sup_voltage = 0;
-    sup_voltage = get_battery_voltage();
-
-    if (sup_voltage <= MINIMAL_BATTERY_VOLTAGE_V) {
-        std::string sup_voltage_str = std::to_string(sup_voltage);
-        std::cout << "Battery voltage low. Current voltage " << sup_voltage_str << std::endl;
-        send_sms("Warning: Battery voltage low. Current voltage = "+sup_voltage_str+" V");
-    }
-    
-    return;
-}
-
-bool check_load_current() {
-		
-
-							
-
-    if(is_hackrf_transfer_running() && current_action != "NONE") {
-        
-        float current = get_load_current();
-        if (get_load_current() <= MINIMAL_LOAD_CURRENT_A) {
-            return false;
-						  
-					   
-																 
-																	 
-									 
-					  
-						  
-					   
-																 
-											 
-									
-					 
-						  
-					   
-																 
-											  
-									
-					 
-						  
-						
-																  
-								 
-					 
-						  
-			 
-				
-							   
-		 
-
-        }
-        else {
-            return true;
-        }
-    } else {
-        return false;
-    }
-}
-
 float get_battery_voltage() {
 
     float sup_voltage = 0;
@@ -701,6 +639,39 @@ float get_load_current() {
 
     return load_current;
 }
+
+void check_battery_voltage() {
+    
+    float sup_voltage = 0;
+    sup_voltage = get_battery_voltage();
+
+    if (sup_voltage <= MINIMAL_BATTERY_VOLTAGE_V) {
+        std::string sup_voltage_str = std::to_string(sup_voltage);
+        std::cout << "Battery voltage low. Current voltage " << sup_voltage_str << std::endl;
+        send_sms("Warning: Battery voltage low. Current voltage = "+sup_voltage_str+" V");
+    }
+    
+    return;
+}
+
+bool check_load_current() {
+	
+    if(is_hackrf_transfer_running() && current_action != "NONE") {
+        
+        float current = get_load_current();
+        if (get_load_current() <= MINIMAL_LOAD_CURRENT_A) {
+            return false;
+		
+        }
+        else {
+            return true;
+        }
+    } else {
+        return false;
+    }
+}
+
+
 
 void ina219_init() {
     
@@ -969,7 +940,7 @@ int main() {
 								float load_current = get_load_current();
                                 std::string voltage_str = std::to_string(voltage);
 								std::string load_current_str = std::to_string(load_current);
-                                send_sms("Battery voltage: "+voltage_str+"V ", "Load current: "+load_current_str+"mA"); 
+                                send_sms("Battery voltage: "+voltage_str+"V Load current: "+load_current_str+"mA"); 
                                 hackrf_cmd = -1;
 
                             } else {
