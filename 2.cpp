@@ -349,6 +349,7 @@ void send_sms(const std::string& content) {
     }
 
     std::cout << "SMS send on SIM800C" << std::endl;
+	std::this_thread::sleep_for(std::chrono::seconds(5));													 
     return;
 
 }
@@ -436,10 +437,13 @@ void start_hackrf_transfer(bool loop_transfer) {
 
     if (!loop_transfer) {
         set_current_action(2);
+													
     } else {
         set_current_action(1);
     }
-
+	
+	send_sms(current_action+" mode is running");
+	/*
     std::this_thread::sleep_for(std::chrono::seconds(5));
 
     if (check_load_current()) {
@@ -454,7 +458,7 @@ void start_hackrf_transfer(bool loop_transfer) {
         stop_hackrf_transfer();
         std::this_thread::sleep_for(std::chrono::seconds(3));
         send_sms("Error: HackRF transfer is not started. Current mode: NONE");
-    }
+    } */
 
     return;
 }
@@ -627,12 +631,44 @@ void check_battery_voltage() {
 }
 
 bool check_load_current() {
+		
+
+							
 
     if(is_hackrf_transfer_running() && current_action != "NONE") {
         
         float current = get_load_current();
         if (get_load_current() <= MINIMAL_LOAD_CURRENT_A) {
             return false;
+						  
+					   
+																 
+																	 
+									 
+					  
+						  
+					   
+																 
+											 
+									
+					 
+						  
+					   
+																 
+											  
+									
+					 
+						  
+						
+																  
+								 
+					 
+						  
+			 
+				
+							   
+		 
+
         }
         else {
             return true;
@@ -650,7 +686,7 @@ float get_battery_voltage() {
     i->sleep();
 
     /* ONLY FOR DEBUG */
-    sup_voltage = 12.1;
+    //sup_voltage = 12.1;
 
     return sup_voltage;
 }
@@ -660,9 +696,7 @@ float get_load_current() {
     i->wake();
     load_current = i->current();
     /* ONLY FOR DEBUG */
-    load_current = 1000;
-
-    load_current /= 1000;
+    //load_current = 1000;
     i->sleep();
 
     return load_current;
@@ -702,17 +736,16 @@ int main() {
             if (line.find("+CMGS:") != std::string::npos) {
                 rx_ok = false;
                 std::cout << "SMS sending successfull" << std::endl;
-                break;
+                
             }
 
             if (line.find("+CMS ERROR:") != std::string::npos) {
                 rx_ok = false;
                 std::cout << "SMS sending error" << std::endl;
-                break;
-            } 
                 
-            rx_ok = true;
-            
+            } else {  
+				rx_ok = true;
+            }
         }
 
         switch (current_state)
@@ -830,6 +863,7 @@ int main() {
                 std::cout << "Память SIM очищена, go to idle..." << std::endl;
 		        setState(IDLE); 
             }
+			 
         
         case DELETING_SMS:
             
@@ -844,9 +878,10 @@ int main() {
                     setState(IDLE);
                 }
                 
-            } else {
-                //std::cout << "Нет ответа на удаление SMS" << std::endl;
-                // доработать логику
+            } else if (rx_ok && !line.find("OK")) {
+																							
+                std::cout << "Нет ответа на удаление SMS" << std::endl;
+                setState(IDLE);
             }
             break;
 
@@ -931,8 +966,10 @@ int main() {
 
                             } else if (hackrf_cmd_next == GET_BAT_VOLTAGE){
                                 float voltage = get_battery_voltage();
+								float load_current = get_load_current();
                                 std::string voltage_str = std::to_string(voltage);
-                                send_sms("Battery voltage: "+voltage_str+"V"); 
+								std::string load_current_str = std::to_string(load_current);
+                                send_sms("Battery voltage: "+voltage_str+"V ", "Load current: "+load_current_str+"mA"); 
                                 hackrf_cmd = -1;
 
                             } else {
@@ -963,7 +1000,7 @@ int main() {
             }
 
             check_hackrf_transfer();
-            check_battery_voltage();
+            //check_battery_voltage();
             break;
 
         case TURN_OFF:
