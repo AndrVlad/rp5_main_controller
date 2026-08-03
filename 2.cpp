@@ -14,6 +14,8 @@
 #include <signal.h>
 #include <bits/stdc++.h>
 #include <regex>
+#include <sstream>
+#include <iomanip>
 
 #include "src/ina219.h"
 
@@ -938,8 +940,15 @@ int main() {
                             } else if (hackrf_cmd_next == GET_BAT_VOLTAGE){
                                 float voltage = get_battery_voltage();
 								float load_current = get_load_current();
-                                std::string voltage_str = std::to_string(voltage);
-								std::string load_current_str = std::to_string(load_current);
+
+                                std::stringstream ss_voltage;
+                                ss_voltage << std::fixed << std::setprecision(2) << voltage;
+                                std::string voltage_str = ss_voltage.str();
+
+                                std::stringstream ss_current;
+                                ss_current << std::fixed << std::setprecision(2) << load_current;
+                                std::string load_current_str = ss_current.str();
+
                                 send_sms("Battery voltage: "+voltage_str+"V Load current: "+load_current_str+"mA"); 
                                 hackrf_cmd = -1;
 
