@@ -946,7 +946,7 @@ int main() {
                                 std::string voltage_str = ss_voltage.str();
 
                                 std::stringstream ss_current;
-                                ss_current << std::fixed << std::setprecision(2) << load_current;
+                                ss_current << std::fixed << std::setprecision(0) << load_current;
                                 std::string load_current_str = ss_current.str();
 
                                 send_sms("Battery voltage: "+voltage_str+"V Load current: "+load_current_str+"mA"); 
